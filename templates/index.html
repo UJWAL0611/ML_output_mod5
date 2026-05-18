@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReviewGuard — Fake Product Review Detector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── HEADER ─────────────────────────────────────────────────── -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo-group">
+        <span class="logo-icon" aria-hidden="true">🛡️</span>
+        <span class="logo-text">ReviewGuard</span>
+      </div>
+      <div class="header-badges">
+        <span class="badge">ML</span>
+        <span class="badge">NLP</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── HERO ───────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-inner">
+      <h1 class="hero-headline">Detect <span class="accent">fake</span> reviews instantly</h1>
+      <p class="hero-sub">Paste a product link to scan all its reviews at once, or paste a single review for an instant verdict.</p>
+    </div>
+  </section>
+
+  <!-- ── TAB SWITCHER ───────────────────────────────────────────── -->
+  <div class="tab-bar-wrap">
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-url" data-tab="url" type="button">
+        <span class="tab-icon">🔗</span>
+        <span>Product Link</span>
+        <span class="tab-badge">Bulk Scan</span>
+      </button>
+      <button class="tab-btn" id="tab-text" data-tab="text" type="button">
+        <span class="tab-icon">📝</span>
+        <span>Paste Review</span>
+        <span class="tab-badge">Single</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SECTION 1 — PRODUCT LINK SCAN
+  ══════════════════════════════════════════════════════════════════ -->
+  <main class="main-content" id="section-url">
+
+    <div class="card card-url">
+      <!-- Input row -->
+      <div class="url-input-row">
+        <div class="url-field-wrap">
+          <span class="url-prefix-icon" aria-hidden="true">🔗</span>
+          <input
+            type="url"
+            id="url-input"
+            class="url-input"
+            placeholder="https://www.amazon.com/dp/B08N5WRWNW  or any product review page"
+            aria-label="Product URL"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <button id="btn-scan-url" class="btn btn-primary" type="button">
+          <span class="btn-label">Scan Reviews</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </button>
+        <button id="btn-clear-url" class="btn btn-ghost" type="button">Clear</button>
+      </div>
+      <p class="url-hint">Works with Amazon, Flipkart, and most review pages. Results depend on what the site allows to be fetched.</p>
+
+      <!-- Results panel -->
+      <div id="url-results" class="url-results" aria-live="polite">
+
+        <!-- IDLE -->
+        <div id="url-idle" class="url-state url-idle-state">
+          <span class="url-idle-icon" aria-hidden="true">🌐</span>
+          <p class="url-idle-text">Enter a product URL above and click <strong>Scan Reviews</strong></p>
+        </div>
+
+        <!-- LOADING -->
+        <div id="url-loading" class="url-state url-loading-state hidden">
+          <div class="big-spinner" aria-hidden="true"></div>
+          <p class="url-loading-text">Fetching &amp; analysing reviews…</p>
+          <p class="url-loading-sub">This may take 10–20 seconds</p>
+        </div>
+
+        <!-- RESULT -->
+        <div id="url-result-body" class="url-state url-result-body hidden">
+
+          <!-- Summary row -->
+          <div class="url-summary">
+            <div class="summary-stat">
+              <span id="url-total" class="stat-num">0</span>
+              <span class="stat-label">Reviews Scanned</span>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-stat">
+              <span id="url-genuine-count" class="stat-num genuine-text">0</span>
+              <span class="stat-label">Genuine</span>
+            </div>
+            <div class="summary-divider"></div>
+            <div class="summary-stat">
+              <span id="url-fake-count" class="stat-num fake-text">0</span>
+              <span class="stat-label">Fake</span>
+            </div>
+          </div>
+
+          <!-- Big donut + bars -->
+          <div class="url-chart-row">
+            <!-- Donut chart -->
+            <div class="donut-wrap" aria-label="Review breakdown chart">
+              <svg class="donut-svg" viewBox="0 0 140 140" width="140" height="140" aria-hidden="true">
+                <circle class="donut-track" cx="70" cy="70" r="54" />
+                <circle id="donut-genuine-arc" class="donut-arc donut-genuine" cx="70" cy="70" r="54"
+                  stroke-dasharray="339.29" stroke-dashoffset="339.29" />
+                <circle id="donut-fake-arc" class="donut-arc donut-fake" cx="70" cy="70" r="54"
+                  stroke-dasharray="339.29" stroke-dashoffset="339.29" />
+              </svg>
+              <div class="donut-center">
+                <span id="donut-label" class="donut-label">—</span>
+                <span class="donut-sub">overall</span>
+              </div>
+            </div>
+
+            <!-- Percentage bars -->
+            <div class="url-prob-bars">
+              <div class="prob-row">
+                <span class="prob-name genuine-text">Genuine</span>
+                <div class="prob-track">
+                  <div id="url-bar-genuine" class="prob-fill prob-fill-genuine" style="width:0%"></div>
+                </div>
+                <span id="url-pct-genuine" class="prob-pct">0%</span>
+              </div>
+              <div class="prob-row">
+                <span class="prob-name fake-text">Fake</span>
+                <div class="prob-track">
+                  <div id="url-bar-fake" class="prob-fill prob-fill-fake" style="width:0%"></div>
+                </div>
+                <span id="url-pct-fake" class="prob-pct">0%</span>
+              </div>
+              <div class="url-verdict-chip" id="url-verdict-chip"></div>
+            </div>
+          </div>
+
+          <!-- Individual review list -->
+          <div class="review-list-header">
+            <span class="review-list-title">Individual Reviews</span>
+            <div class="review-filter-btns">
+              <button class="filter-btn active" data-filter="all" type="button">All</button>
+              <button class="filter-btn" data-filter="Fake" type="button">Fake only</button>
+              <button class="filter-btn" data-filter="Genuine" type="button">Genuine only</button>
+            </div>
+          </div>
+          <div id="review-list" class="review-list"></div>
+
+        </div><!-- /url-result-body -->
+
+        <!-- ERROR -->
+        <div id="url-error" class="url-state url-error-state hidden">
+          <span class="error-icon" aria-hidden="true">⚠️</span>
+          <p id="url-error-msg" class="error-message">Something went wrong.</p>
+        </div>
+
+      </div><!-- /url-results -->
+    </div><!-- /card-url -->
+  </main>
+
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SECTION 2 — PASTE SINGLE REVIEW
+  ══════════════════════════════════════════════════════════════════ -->
+  <main class="main-content hidden" id="section-text">
+    <div class="card">
+
+      <!-- LEFT PANE: Input -->
+      <div class="pane pane-input">
+        <label class="pane-label" for="review-input">Paste your review</label>
+        <textarea
+          id="review-input"
+          class="review-textarea"
+          maxlength="10000"
+          placeholder="e.g. This product completely changed my life!!! BEST EVER!!!"
+          aria-label="Product review text"
+          spellcheck="true"
+        ></textarea>
+        <div class="textarea-footer">
+          <span id="char-count" class="char-count">0 / 10,000</span>
+          <div class="btn-group">
+            <button id="btn-clear" class="btn btn-ghost" type="button">Clear</button>
+            <button id="btn-analyse" class="btn btn-primary" type="button">
+              <span class="btn-label">Analyse</span>
+              <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+        <p class="keyboard-hint">Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to analyse</p>
+      </div>
+
+      <!-- RIGHT PANE: Results -->
+      <div class="pane pane-result" aria-live="polite" aria-atomic="true">
+
+        <!-- IDLE -->
+        <div id="state-idle" class="result-state result-idle">
+          <div class="idle-icon" aria-hidden="true">🔍</div>
+          <p class="idle-text">Your verdict will appear here</p>
+          <p class="idle-sub">Enter a review and click Analyse</p>
+        </div>
+
+        <!-- RESULT -->
+        <div id="state-result" class="result-state result-body hidden">
+          <div class="verdict-header">
+            <span id="verdict-icon" class="verdict-icon" aria-hidden="true"></span>
+            <span id="verdict-label" class="verdict-label"></span>
+          </div>
+
+          <div class="meter-wrap" aria-label="Confidence meter">
+            <svg class="radial-meter" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
+              <circle class="meter-track" cx="60" cy="60" r="54" />
+              <circle id="meter-arc" class="meter-arc" cx="60" cy="60" r="54"
+                stroke-dasharray="339.29" stroke-dashoffset="339.29" />
+            </svg>
+            <div class="meter-center">
+              <span id="confidence-pct" class="confidence-pct">0%</span>
+              <span class="confidence-label">confidence</span>
+            </div>
+          </div>
+
+          <div class="prob-bars">
+            <div class="prob-row">
+              <span class="prob-name fake-text">Fake</span>
+              <div class="prob-track">
+                <div id="bar-fake" class="prob-fill prob-fill-fake" style="width:0%"></div>
+              </div>
+              <span id="pct-fake" class="prob-pct">0%</span>
+            </div>
+            <div class="prob-row">
+              <span class="prob-name genuine-text">Genuine</span>
+              <div class="prob-track">
+                <div id="bar-genuine" class="prob-fill prob-fill-genuine" style="width:0%"></div>
+              </div>
+              <span id="pct-genuine" class="prob-pct">0%</span>
+            </div>
+          </div>
+
+          <div class="signals-section">
+            <p class="signals-title">Heuristic Signals</p>
+            <div id="signal-chips" class="signal-chips"></div>
+          </div>
+        </div>
+
+        <!-- ERROR -->
+        <div id="state-error" class="result-state result-error hidden">
+          <div class="error-icon" aria-hidden="true">⚠️</div>
+          <p id="error-message" class="error-message">An unexpected error occurred.</p>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+
+  <!-- ── HOW IT WORKS ───────────────────────────────────────────── -->
+  <section class="how-it-works">
+    <div class="hiw-inner">
+      <h2 class="hiw-title">How it works</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <div class="step-icon" aria-hidden="true">🧹</div>
+          <h3 class="step-title">Preprocess</h3>
+          <p class="step-desc">HTML stripping, lowercasing, stopword removal, and WordNet lemmatization clean the raw text.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <div class="step-icon" aria-hidden="true">📐</div>
+          <h3 class="step-title">Vectorise</h3>
+          <p class="step-desc">TF-IDF with bigrams converts the cleaned text into a 50,000-feature sparse matrix.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <div class="step-icon" aria-hidden="true">🤖</div>
+          <h3 class="step-title">Classify</h3>
+          <p class="step-desc">A Logistic Regression model trained on labelled reviews predicts Fake or Genuine.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">04</div>
+          <div class="step-icon" aria-hidden="true">💡</div>
+          <h3 class="step-title">Explain</h3>
+          <p class="step-desc">Heuristic signal chips highlight suspicious patterns like excessive punctuation or superlatives.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span class="footer-logo">🛡️ ReviewGuard</span>
+      <span class="footer-note">Powered by Scikit-learn · NLTK · Flask · BeautifulSoup</span>
+    </div>
+  </footer>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
