@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+ML_output_mod5/
+.env
+*.egg-info/
+dist/
+build/

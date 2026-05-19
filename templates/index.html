@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ReviewGuard — Fake Product Review Detector</title>
+  <title>ReviewGuard — Universal Fake Review Detector</title>
+  <meta name="description" content="Detect fake product reviews instantly using ML + NLP + Gemini AI. Works with Amazon, Flipkart, Meesho, Myntra, eBay, Walmart and any other review site." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
@@ -18,20 +19,76 @@
         <span class="logo-icon" aria-hidden="true">🛡️</span>
         <span class="logo-text">ReviewGuard</span>
       </div>
-      <div class="header-badges">
-        <span class="badge">ML</span>
-        <span class="badge">NLP</span>
+      <div class="header-right">
+        <div class="header-badges">
+          <span class="badge">ML</span>
+          <span class="badge">NLP</span>
+          <span id="ai-status-badge" class="badge badge-ai" title="Gemini AI status">🤖 AI: Off</span>
+          <span id="playwright-badge" class="badge badge-pw hidden" title="Playwright JS-rendering active">🌐 JS</span>
+        </div>
+        <button id="btn-settings" class="btn-icon" title="Settings — Gemini API Key" type="button" aria-label="Open settings">⚙️</button>
       </div>
     </div>
   </header>
+
+  <!-- ── SETTINGS PANEL ────────────────────────────────────────── -->
+  <div id="settings-overlay" class="settings-overlay hidden" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="settings-panel">
+      <div class="settings-header">
+        <span class="settings-title">⚙️ Settings</span>
+        <button id="btn-close-settings" class="btn-icon" type="button" aria-label="Close settings">✕</button>
+      </div>
+
+      <div class="settings-body">
+        <label class="settings-label" for="gemini-key-input">
+          🤖 Gemini AI API Key
+          <span class="settings-hint">Enables AI cross-verification of each review</span>
+        </label>
+        <div class="settings-key-row">
+          <input
+            id="gemini-key-input"
+            type="password"
+            class="settings-input"
+            placeholder="AIza…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="btn-save-key" class="btn btn-primary btn-sm" type="button">Save</button>
+          <button id="btn-clear-key" class="btn btn-ghost btn-sm" type="button">Clear</button>
+        </div>
+        <p class="settings-desc">
+          Get a free key at <a href="https://aistudio.google.com" target="_blank" rel="noopener">aistudio.google.com</a>.
+          The key is stored only in memory and cleared on server restart.
+        </p>
+
+        <div class="settings-divider"></div>
+
+        <div class="settings-status-row">
+          <div class="status-item">
+            <span id="st-gemini-lib" class="status-dot dot-grey"></span>
+            <span>Gemini library installed</span>
+          </div>
+          <div class="status-item">
+            <span id="st-gemini-key" class="status-dot dot-grey"></span>
+            <span>API key set</span>
+          </div>
+          <div class="status-item">
+            <span id="st-playwright" class="status-dot dot-grey"></span>
+            <span>Playwright JS-rendering</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ── HERO ───────────────────────────────────────────────────── -->
   <section class="hero">
     <div class="hero-inner">
       <h1 class="hero-headline">Detect <span class="accent">fake</span> reviews instantly</h1>
-      <p class="hero-sub">Paste a product link to scan all its reviews at once, or paste a single review for an instant verdict.</p>
+      <p class="hero-sub">Works with <strong>any website</strong> — Amazon, Flipkart, Meesho, Myntra, eBay, Walmart, Trustpilot and more. Powered by ML + NLP + Gemini AI.</p>
     </div>
   </section>
+
 
   <!-- ── TAB SWITCHER ───────────────────────────────────────────── -->
   <div class="tab-bar-wrap">
@@ -60,10 +117,10 @@
         <div class="url-field-wrap">
           <span class="url-prefix-icon" aria-hidden="true">🔗</span>
           <input
-            type="url"
+            type="text"
             id="url-input"
             class="url-input"
-            placeholder="https://www.amazon.com/dp/B08N5WRWNW  or any product review page"
+            placeholder="Paste any product URL — Amazon, Flipkart, eBay, Walmart, Meesho, Myntra..."
             aria-label="Product URL"
             autocomplete="off"
             spellcheck="false"
@@ -75,7 +132,11 @@
         </button>
         <button id="btn-clear-url" class="btn btn-ghost" type="button">Clear</button>
       </div>
-      <p class="url-hint">Works with Amazon, Flipkart, and most review pages. Results depend on what the site allows to be fetched.</p>
+      <p class="url-hint">
+        Supports: Amazon · Flipkart · Meesho · Myntra · Snapdeal · eBay · Walmart · Best Buy ·
+        Target · Etsy · AliExpress · Alibaba · Temu · SHEIN · Lazada · Shopee · Noon · Jumia ·
+        Trustpilot · Yelp · TripAdvisor · and any other review page.
+      </p>
 
       <!-- Results panel -->
       <div id="url-results" class="url-results" aria-live="polite">
@@ -150,6 +211,9 @@
               <div class="url-verdict-chip" id="url-verdict-chip"></div>
             </div>
           </div>
+
+          <!-- Suspicious patterns intelligence box -->
+          <div id="suspicious-patterns-container"></div>
 
           <!-- Individual review list -->
           <div class="review-list-header">
@@ -251,6 +315,9 @@
             </div>
           </div>
 
+          <!-- Trust score display -->
+          <div id="trust-score-display" class="trust-score-section"></div>
+
           <div class="signals-section">
             <p class="signals-title">Heuristic Signals</p>
             <div id="signal-chips" class="signal-chips"></div>
@@ -272,30 +339,42 @@
   <section class="how-it-works">
     <div class="hiw-inner">
       <h2 class="hiw-title">How it works</h2>
-      <div class="steps-grid">
+      <div class="steps-grid steps-grid-6">
         <div class="step-card">
           <div class="step-num">01</div>
+          <div class="step-icon" aria-hidden="true">🌐</div>
+          <h3 class="step-title">Scrape</h3>
+          <p class="step-desc">Static HTML scraping first; if reviews load via JavaScript, Playwright headless Chromium renders the page and extracts them.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">02</div>
           <div class="step-icon" aria-hidden="true">🧹</div>
           <h3 class="step-title">Preprocess</h3>
           <p class="step-desc">HTML stripping, lowercasing, stopword removal, and WordNet lemmatization clean the raw text.</p>
         </div>
         <div class="step-card">
-          <div class="step-num">02</div>
+          <div class="step-num">03</div>
           <div class="step-icon" aria-hidden="true">📐</div>
           <h3 class="step-title">Vectorise</h3>
           <p class="step-desc">TF-IDF with bigrams converts the cleaned text into a 50,000-feature sparse matrix.</p>
         </div>
         <div class="step-card">
-          <div class="step-num">03</div>
-          <div class="step-icon" aria-hidden="true">🤖</div>
+          <div class="step-num">04</div>
+          <div class="step-icon" aria-hidden="true">🧠</div>
           <h3 class="step-title">Classify</h3>
-          <p class="step-desc">A Logistic Regression model trained on labelled reviews predicts Fake or Genuine.</p>
+          <p class="step-desc">A Logistic Regression model trained on labelled reviews predicts Fake or Genuine with a probability score.</p>
         </div>
         <div class="step-card">
-          <div class="step-num">04</div>
-          <div class="step-icon" aria-hidden="true">💡</div>
-          <h3 class="step-title">Explain</h3>
-          <p class="step-desc">Heuristic signal chips highlight suspicious patterns like excessive punctuation or superlatives.</p>
+          <div class="step-num">05</div>
+          <div class="step-icon" aria-hidden="true">🔍</div>
+          <h3 class="step-title">Heuristic Check</h3>
+          <p class="step-desc">Linguistic and structural rules scan for excessive caps, superlatives, template phrases, and repetition patterns.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">06</div>
+          <div class="step-icon" aria-hidden="true">✨</div>
+          <h3 class="step-title">AI Cross-Check</h3>
+          <p class="step-desc">Gemini 2.0 Flash semantically evaluates each review for authenticity and provides a confidence score + short reason.</p>
         </div>
       </div>
     </div>
@@ -305,7 +384,7 @@
   <footer class="site-footer">
     <div class="footer-inner">
       <span class="footer-logo">🛡️ ReviewGuard</span>
-      <span class="footer-note">Powered by Scikit-learn · NLTK · Flask · BeautifulSoup</span>
+      <span class="footer-note">Powered by Scikit-learn · NLTK · Flask · BeautifulSoup · Gemini AI · Playwright</span>
     </div>
   </footer>
 

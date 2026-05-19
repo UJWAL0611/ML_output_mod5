@@ -5,6 +5,89 @@ const CIRCUMFERENCE = 339.29; // 2 * Math.PI * 54
 const MAX_CHARS     = 10000;
 const WARN_CHARS    = 9000;
 
+// ── Settings panel ────────────────────────────────────────────────
+const btnSettings      = document.getElementById("btn-settings");
+const settingsOverlay  = document.getElementById("settings-overlay");
+const btnCloseSettings = document.getElementById("btn-close-settings");
+const geminiKeyInput   = document.getElementById("gemini-key-input");
+const btnSaveKey       = document.getElementById("btn-save-key");
+const btnClearKey      = document.getElementById("btn-clear-key");
+const aiStatusBadge    = document.getElementById("ai-status-badge");
+const playwrightBadge  = document.getElementById("playwright-badge");
+const stGeminiLib      = document.getElementById("st-gemini-lib");
+const stGeminiKey      = document.getElementById("st-gemini-key");
+const stPlaywright     = document.getElementById("st-playwright");
+
+btnSettings.addEventListener("click", () => {
+  settingsOverlay.classList.remove("hidden");
+  refreshGeminiStatus();
+});
+btnCloseSettings.addEventListener("click", () => settingsOverlay.classList.add("hidden"));
+settingsOverlay.addEventListener("click", (e) => {
+  if (e.target === settingsOverlay) settingsOverlay.classList.add("hidden");
+});
+
+async function refreshGeminiStatus() {
+  try {
+    const r = await fetch("/gemini-status");
+    const d = await r.json();
+    // Dots
+    stGeminiLib.className  = "status-dot " + (d.gemini_library ? "dot-green" : "dot-red");
+    stGeminiKey.className  = "status-dot " + (d.gemini_active  ? "dot-green" : "dot-grey");
+    stPlaywright.className = "status-dot " + (d.playwright_library ? "dot-green" : "dot-grey");
+    // Header badges
+    if (d.gemini_active) {
+      aiStatusBadge.textContent = "🤖 AI: On";
+      aiStatusBadge.classList.add("active");
+    } else {
+      aiStatusBadge.textContent = "🤖 AI: Off";
+      aiStatusBadge.classList.remove("active");
+    }
+    if (d.playwright_library) {
+      playwrightBadge.classList.remove("hidden");
+    } else {
+      playwrightBadge.classList.add("hidden");
+    }
+  } catch (_) {}
+}
+
+btnSaveKey.addEventListener("click", async () => {
+  const key = geminiKeyInput.value.trim();
+  if (!key) { alert("Please enter an API key."); return; }
+  btnSaveKey.disabled = true;
+  btnSaveKey.textContent = "Saving…";
+  try {
+    const r = await fetch("/set-api-key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: key }),
+    });
+    const d = await r.json();
+    refreshGeminiStatus();
+    if (d.gemini_active) {
+      settingsOverlay.classList.add("hidden");
+    }
+  } catch (_) {
+    alert("Could not reach the server.");
+  } finally {
+    btnSaveKey.disabled = false;
+    btnSaveKey.textContent = "Save";
+  }
+});
+
+btnClearKey.addEventListener("click", async () => {
+  geminiKeyInput.value = "";
+  await fetch("/set-api-key", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: "" }),
+  });
+  refreshGeminiStatus();
+});
+
+// Poll status on page load
+refreshGeminiStatus();
+
 // ── Tab switching ─────────────────────────────────────────────────
 const tabBtns     = document.querySelectorAll(".tab-btn");
 const sectionUrl  = document.getElementById("section-url");
@@ -66,9 +149,22 @@ urlInput.addEventListener("keydown", (e) => {
 });
 
 async function runUrlScan() {
-  const url = urlInput.value.trim();
+  // Trim whitespace and strip any accidental surrounding quotes
+  let url = urlInput.value.trim().replace(/^["']|["']$/g, "");
+
   if (!url) { showUrlError("Please enter a product URL."); return; }
-  if (!/^https?:\/\//i.test(url)) { showUrlError("URL must start with http:// or https://"); return; }
+
+  // Auto-prepend https:// if user forgot the scheme
+  if (!/^https?:\/\//i.test(url)) {
+    url = "https://" + url;
+    urlInput.value = url;
+  }
+
+  // Basic domain check — must have at least one dot after the scheme
+  if (!/^https?:\/\/[^/\s]+\.[^/\s]/.test(url)) {
+    showUrlError("That doesn't look like a valid URL. Please paste the full product page link.");
+    return;
+  }
 
   setUrlLoading(true);
   showUrlState(urlLoading);
@@ -79,15 +175,31 @@ async function runUrlScan() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
     });
-    const data = await resp.json();
+
+    let data;
+    try {
+      data = await resp.json();
+    } catch (_) {
+      showUrlError(`Server returned an unreadable response (HTTP ${resp.status}). Try a different URL.`);
+      return;
+    }
 
     if (!resp.ok) {
       showUrlError(data.error || `Server error (HTTP ${resp.status}).`);
       return;
     }
+    // Handle "soft errors" — server returned 200 but with an error field (e.g. no reviews found)
+    if (data.error) {
+      showUrlError(data.error);
+      return;
+    }
     renderUrlResult(data);
   } catch (err) {
-    showUrlError("Network error — could not reach the server.");
+    if (err.name === "TypeError") {
+      showUrlError("Network error — make sure the Flask server is running on port 5000.");
+    } else {
+      showUrlError("Unexpected error: " + err.message);
+    }
   } finally {
     setUrlLoading(false);
   }
@@ -117,22 +229,59 @@ function renderUrlResult(data) {
     ? getComputedStyle(document.documentElement).getPropertyValue("--genuine").trim()
     : getComputedStyle(document.documentElement).getPropertyValue("--fake").trim();
 
-  // Verdict chip
+  // Verdict chip with trust score
   urlVerdictChip.className = "url-verdict-chip";
-  if (data.genuine_pct >= 70) {
+  const trustScore = data.aggregate_trust || 50;
+  if (data.genuine_pct >= 70 && trustScore >= 60) {
     urlVerdictChip.classList.add("mostly-genuine");
-    urlVerdictChip.textContent = "✅ Mostly Genuine";
-  } else if (data.fake_pct >= 70) {
+    urlVerdictChip.textContent = `✅ Mostly Genuine (Trust: ${trustScore}%)`;
+  } else if (data.fake_pct >= 70 || trustScore < 30) {
     urlVerdictChip.classList.add("mostly-fake");
-    urlVerdictChip.textContent = "🚨 Mostly Fake";
+    urlVerdictChip.textContent = `🚨 Mostly Fake (Trust: ${trustScore}%)`;
   } else {
     urlVerdictChip.classList.add("mixed");
-    urlVerdictChip.textContent = "⚖️ Mixed Reviews";
+    urlVerdictChip.textContent = `⚖️ Mixed Reviews (Trust: ${trustScore}%)`;
   }
+
+  // Update header AI badge from actual response
+  if (data.gemini_active) {
+    aiStatusBadge.textContent = "🤖 AI: On";
+    aiStatusBadge.classList.add("active");
+  }
+  if (data.playwright_active) {
+    playwrightBadge.classList.remove("hidden");
+  }
+
+  // Display suspicious patterns if any
+  renderSuspiciousPatterns(data.suspicious_patterns || []);
 
   // Render review list
   renderReviewList(allReviews);
   showUrlState(urlResultBody);
+}
+
+function renderSuspiciousPatterns(patterns) {
+  const container = document.getElementById("suspicious-patterns-container");
+  if (!container) return;
+  
+  if (!patterns || patterns.length === 0) {
+    container.innerHTML = "";
+    container.style.display = "none";
+    return;
+  }
+  
+  container.style.display = "block";
+  container.innerHTML = `
+    <div class="suspicious-patterns-box">
+      <div class="patterns-header">
+        <span class="patterns-icon">🔍</span>
+        <span class="patterns-title">Intelligence Analysis</span>
+      </div>
+      <div class="patterns-list">
+        ${patterns.map(p => `<div class="pattern-item">${escapeHtml(p)}</div>`).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function animateDonut(genuinePct, fakePct) {
@@ -164,15 +313,45 @@ function renderReviewList(reviews) {
     const words = r.text.trim().split(/\s+/).length;
     const needsExpand = words > 40;
 
+    const trustScore = r.trust_score || 50;
+    const trustClass = trustScore >= 70 ? "high-trust" : trustScore >= 40 ? "medium-trust" : "low-trust";
+    const verificationBadge = r.verification_status
+      ? `<span class="verification-badge ${trustClass}" title="${r.verification_status}">Trust: ${trustScore}%</span>`
+      : "";
+
+    // AI verdict chip
+    let aiChipHtml = "";
+    if (r.ai_verdict) {
+      const av = r.ai_verdict;
+      const isConflict = r.verification_status === "ai_conflict";
+      let chipClass = isConflict ? "ai-conflict" : (av.authentic ? "ai-genuine" : "ai-fake");
+      let chipLabel = isConflict
+        ? `⚡ AI Conflict (${av.confidence}%)`
+        : (av.authentic ? `🤖 AI: Authentic (${av.confidence}%)` : `🤖 AI: Suspicious (${av.confidence}%)`);
+      aiChipHtml = `
+        <span class="ai-chip ${chipClass}">${chipLabel}</span>
+        ${av.reason ? `<span class="ai-reason">"${escapeHtml(av.reason)}"</span>` : ""}
+      `;
+    }
+
+    const flagsHtml = r.flags && r.flags.length > 0
+      ? `<div class="review-flags">${r.flags.slice(0, 3).map(f => `<span class="flag-chip">⚑ ${escapeHtml(f)}</span>`).join("")}</div>`
+      : "";
+
     item.innerHTML = `
       <div class="review-text-col">
         <p class="review-text-body" id="rtb-${idx}">${escapeHtml(r.text)}</p>
         ${needsExpand ? `<button class="review-expand-btn" data-idx="${idx}" type="button">Show more</button>` : ""}
-        <span class="review-meta">${r.confidence_pct}% confidence · Fake ${r.fake_prob}% · Genuine ${r.genuine_prob}%</span>
+        ${flagsHtml}
+        ${aiChipHtml}
+        <span class="review-meta">${r.confidence_pct}% ML confidence · Fake ${r.fake_prob}% · Genuine ${r.genuine_prob}%</span>
       </div>
-      <span class="review-badge ${r.prediction === "Fake" ? "fake" : "genuine"}">
-        ${r.prediction === "Fake" ? "🚨 Fake" : "✅ Genuine"}
-      </span>`;
+      <div class="review-badges">
+        <span class="review-badge ${r.prediction === "Fake" ? "fake" : "genuine"}">
+          ${r.prediction === "Fake" ? "🚨 Fake" : "✅ Genuine"}
+        </span>
+        ${verificationBadge}
+      </div>`;
     reviewList.appendChild(item);
   });
 
@@ -214,7 +393,8 @@ function showUrlState(activeEl) {
   });
 }
 function showUrlError(msg) {
-  urlErrorMsg.textContent = msg;
+  // Render newlines as line breaks
+  urlErrorMsg.innerHTML = msg.replace(/\n/g, "<br>").replace(/•/g, "&#8226;");
   showUrlState(urlError);
 }
 function setUrlLoading(on) {
@@ -314,7 +494,43 @@ function renderResult(data, rawText) {
   pctFake.textContent    = `${data.fake_prob}%`;
   pctGenuine.textContent = `${data.genuine_prob}%`;
 
-  renderSignalChips(computeSignals(rawText));
+  // Display trust score and verification status if available
+  const trustScoreEl = document.getElementById("trust-score-display");
+  if (trustScoreEl && data.trust_score !== undefined) {
+    const trustScore = data.trust_score;
+    const trustClass = trustScore >= 70 ? "high-trust" : trustScore >= 40 ? "medium-trust" : "low-trust";
+    trustScoreEl.innerHTML = `
+      <div class="trust-score-box ${trustClass}">
+        <span class="trust-label">Trust Score:</span>
+        <span class="trust-value">${trustScore}%</span>
+      </div>
+    `;
+    if (data.confidence_note) {
+      trustScoreEl.innerHTML += `<p class="confidence-note">${escapeHtml(data.confidence_note)}</p>`;
+    }
+    // Append Gemini AI verdict chip if present
+    if (data.ai_verdict) {
+      const av = data.ai_verdict;
+      const isConflict = data.verification_status === "ai_conflict";
+      const chipClass = isConflict ? "ai-conflict" : (av.authentic ? "ai-genuine" : "ai-fake");
+      const chipLabel = isConflict
+        ? `⚡ AI Conflict (${av.confidence}%)`
+        : (av.authentic ? `🤖 AI: Authentic (${av.confidence}%)` : `🤖 AI: Suspicious (${av.confidence}%)`);
+      trustScoreEl.innerHTML += `
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;align-items:flex-start;">
+          <span class="ai-chip ${chipClass}">${chipLabel}</span>
+          ${av.reason ? `<span class="ai-reason">"${escapeHtml(av.reason)}"</span>` : ""}
+        </div>`;
+    }
+  }
+
+  // Update AI badge if Gemini was used
+  if (data.gemini_active) {
+    aiStatusBadge.textContent = "🤖 AI: On";
+    aiStatusBadge.classList.add("active");
+  }
+
+  renderSignalChips(data.flags || computeSignals(rawText));
   showSection(stateResult);
 }
 
